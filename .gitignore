@@ -1,0 +1,36 @@
+# Ketergantungan dan package (JANGAN PERNAH UPLOAD INI)
+# Folder ini bisa sangat besar dan bisa di-install ulang dengan 'npm install'
+/node_modules
+/backend/node_modules
+/frontend/node_modules
+
+# File Environment
+# Berisi kunci API, password database, dll. Sangat berbahaya jika di-upload.
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+backend/.env
+frontend/.env
+
+# Log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Folder hasil build (produksi)
+# Dihasilkan secara otomatis, tidak perlu di-version control
+/dist
+/build
+/out
+/.next/
+/.svelte-kit/
+
+# File Sistem Operasi
+.DS_Store
+Thumbs.db
+
+# File Editor/IDE
+.vscode/
+.idea/
