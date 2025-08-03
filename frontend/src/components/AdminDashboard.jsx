@@ -46,7 +46,7 @@ const AdminDashboard = () => {
 
         try {
             const response = await axios.post(
-                'http://localhost:3001/api/users/add',
+                'http://localhost:3000/api/users/add',
                 { nik, name, password, role: 'employee' },
                 {
                     headers: {

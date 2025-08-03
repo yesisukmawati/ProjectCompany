@@ -1,17 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { FaFolder, FaFilePdf, FaFileWord, FaFileExcel, FaFileImage, FaFile, FaSearch, FaPlus, FaTrash, FaDownload, FaEllipsisV } from 'react-icons/fa';
+import { FaFilePdf, FaFileWord, FaFileExcel, FaFileImage, FaFile, FaSearch, FaPlus, FaTrash, FaDownload } from 'react-icons/fa';
 import axios from 'axios';
-// Import createClient dari package yang sudah diinstall
 import { createClient } from '@supabase/supabase-js';
 
-// --- KONFIGURASI SUPABASE (UNTUK CLIENT-SIDE UPLOAD) ---
-// Ambil variabel dari import.meta.env (cara Vite)
-const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL
-const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-
-// --- Helper Function ---
+// Helper Functions
 const getFileIcon = (fileType) => {
     if (!fileType) return <FaFile className="text-gray-500" />;
     if (fileType.includes('pdf')) return <FaFilePdf className="text-red-500" />;
@@ -29,10 +21,10 @@ const formatFileSize = (bytes) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
-// --- Komponen Utama ---
 const DocumentsPage = () => {
     const [documents, setDocuments] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [uploading, setUploading] = useState(false);
     const [error, setError] = useState('');
     const [user, setUser] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -45,6 +37,7 @@ const DocumentsPage = () => {
 
     const fetchDocuments = async () => {
         setLoading(true);
+        setError('');
         try {
             const token = localStorage.getItem('authToken');
             const response = await axios.get('http://localhost:3000/api/documents', {
@@ -52,7 +45,7 @@ const DocumentsPage = () => {
             });
             setDocuments(response.data);
         } catch (err) {
-            setError('Gagal memuat dokumen.');
+            setError('Gagal memuat dokumen. Pastikan backend berjalan.');
         } finally {
             setLoading(false);
         }
@@ -62,25 +55,37 @@ const DocumentsPage = () => {
         const file = event.target.files[0];
         if (!file) return;
 
-        setLoading(true);
+        setUploading(true);
         setError('');
+
+        const uniqueFileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9-._]/g, '')}`;
+
         try {
-            // 1. Upload file ke Supabase Storage
-            const { data: uploadData, error: uploadError } = await supabase
-                .storage
-                .from('company-documents')
-                .upload(file.name, file, {
-                    cacheControl: '3600',
-                    upsert: true
-                });
-
-            if (uploadError) throw uploadError;
-
-            // 2. Kirim metadata ke backend kita
             const token = localStorage.getItem('authToken');
+
+            // 1. Minta Signed URL dari backend
+            const { data: uploadUrlData } = await axios.post(
+                'http://localhost:3000/api/documents/create-upload-url',
+                { fileName: uniqueFileName },
+                { headers: { 'Authorization': `Bearer ${token}` } }
+            );
+            
+            // 2. Upload file menggunakan fetch API yang lebih andal
+            const { createClient } = await import('@supabase/supabase-js');
+            const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
+            
+            const { error: uploadError } = await supabase.storage
+                .from('company-documents')
+                .upload(uploadUrlData.path, file);
+
+            if (uploadError) {
+                throw new Error(uploadError.message);
+            }
+
+            // 3. Kirim metadata ke backend
             await axios.post('http://localhost:3000/api/documents/add', {
                 fileName: file.name,
-                filePath: uploadData.path,
+                filePath: uniqueFileName,
                 fileType: file.type,
                 fileSize: file.size
             }, {
@@ -90,28 +95,24 @@ const DocumentsPage = () => {
             fetchDocuments();
 
         } catch (err) {
-            console.error(err);
-            setError('Upload gagal. Pastikan nama file unik atau coba lagi.');
+            console.error("Upload process failed:", err);
+            setError('Upload gagal. Silakan coba lagi.');
         } finally {
-            setLoading(false);
+            setUploading(false);
+            event.target.value = null;
         }
     };
     
-    const handleDelete = async (fileName) => {
-        if (!window.confirm(`Apakah Anda yakin ingin menghapus ${fileName}?`)) return;
-
-        setLoading(true);
-        setError('');
+    const handleDelete = async (docId) => {
+        if (!window.confirm(`Apakah Anda yakin ingin menghapus dokumen ini?`)) return;
         try {
             const token = localStorage.getItem('authToken');
-            await axios.delete(`http://localhost:3000/api/documents/${fileName}`, {
+            await axios.delete(`http://localhost:3000/api/documents/${docId}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             fetchDocuments();
         } catch (err) {
             setError('Gagal menghapus dokumen.');
-        } finally {
-            setLoading(false);
         }
     };
 
@@ -121,14 +122,14 @@ const DocumentsPage = () => {
 
     return (
         <div>
-            {/* Header Halaman */}
             <div className="flex justify-between items-center mb-8">
                 <h1 className="text-3xl font-bold text-gray-800">Document</h1>
                 <div className="flex items-center space-x-4">
                     {user?.role === 'admin' && (
-                        <label className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 cursor-pointer">
-                            <FaPlus className="mr-2" /> New
-                            <input type="file" className="hidden" onChange={handleUpload} />
+                        <label className={`flex items-center px-4 py-2 text-white rounded-lg cursor-pointer ${uploading ? 'bg-gray-400' : 'bg-blue-500 hover:bg-blue-600'}`}>
+                            <FaPlus className="mr-2" /> 
+                            {uploading ? 'Uploading...' : 'New'}
+                            <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} />
                         </label>
                     )}
                     <div className="relative">
@@ -144,10 +145,8 @@ const DocumentsPage = () => {
                 </div>
             </div>
 
-            {/* Konten Utama */}
             <div className="bg-white p-6 rounded-2xl shadow-md">
-                {loading && <p>Loading...</p>}
-                {error && <p className="text-red-500">{error}</p>}
+                {error && <p className="text-center py-4 text-red-500">{error}</p>}
                 
                 <h2 className="text-xl font-bold text-gray-700 mb-4">All Files</h2>
                 <div className="overflow-x-auto">
@@ -162,35 +161,38 @@ const DocumentsPage = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredDocuments.map(doc => (
-                                <tr key={doc.id} className="border-b hover:bg-gray-50">
-                                    <td className="py-3 px-4 flex items-center">
-                                        <span className="text-2xl mr-3">{getFileIcon(doc.file_type)}</span>
-                                        {doc.file_name}
-                                    </td>
-                                    <td className="py-3 px-4">{doc.users?.name || 'System'}</td>
-                                    <td className="py-3 px-4">{new Date(doc.created_at).toLocaleDateString()}</td>
-                                    <td className="py-3 px-4">{formatFileSize(doc.file_size)}</td>
-                                    <td className="py-3 px-4">
-                                        <div className="flex items-center space-x-4">
-                                            <a href={doc.publicUrl} target="_blank" rel="noopener noreferrer" download>
-                                                <FaDownload className="text-gray-600 hover:text-blue-500 cursor-pointer" />
-                                            </a>
-                                            {user?.role === 'admin' && (
-                                                <FaTrash 
-                                                    className="text-gray-600 hover:text-red-500 cursor-pointer" 
-                                                    onClick={() => handleDelete(doc.file_name)}
-                                                />
-                                            )}
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
+                            {loading ? (
+                                <tr><td colSpan="5" className="text-center py-8">Loading documents...</td></tr>
+                            ) : (
+                                filteredDocuments.length > 0 ? filteredDocuments.map(doc => (
+                                    <tr key={doc.id} className="border-b hover:bg-gray-50">
+                                        <td className="py-3 px-4 flex items-center">
+                                            <span className="text-2xl mr-3">{getFileIcon(doc.file_type)}</span>
+                                            <span className="truncate" style={{maxWidth: '300px'}} title={doc.file_name}>{doc.file_name}</span>
+                                        </td>
+                                        <td className="py-3 px-4">{doc.users?.name || 'System'}</td>
+                                        <td className="py-3 px-4">{new Date(doc.created_at).toLocaleDateString()}</td>
+                                        <td className="py-3 px-4">{formatFileSize(doc.file_size)}</td>
+                                        <td className="py-3 px-4">
+                                            <div className="flex items-center space-x-4">
+                                                <a href={doc.publicUrl} target="_blank" rel="noopener noreferrer" download>
+                                                    <FaDownload className="text-gray-600 hover:text-blue-500 cursor-pointer" />
+                                                </a>
+                                                {user?.role === 'admin' && (
+                                                    <FaTrash 
+                                                        className="text-gray-600 hover:text-red-500 cursor-pointer" 
+                                                        onClick={() => handleDelete(doc.id)}
+                                                    />
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )) : (
+                                    <tr><td colSpan="5" className="text-center py-8 text-gray-500">No documents found.</td></tr>
+                                )
+                            )}
                         </tbody>
                     </table>
-                    {filteredDocuments.length === 0 && !loading && (
-                        <p className="text-center py-8 text-gray-500">No documents found.</p>
-                    )}
                 </div>
             </div>
         </div>

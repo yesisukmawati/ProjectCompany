@@ -1,16 +1,30 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import LandingPage from './components/LandingPage';
 import LoginPage from './components/LoginPage';
-import AdminLayout from './components/AdminLayout'; // Import layout baru
-import DashboardPage from './components/DashboardPage'; // Import halaman dashboard baru
-import EmployeeDashboard from './components/EmployeeDashboard';
+import AdminLayout from './components/AdminLayout';
+import DashboardPage from './components/DashboardPage';
 import DocumentsPage from './components/DocumentsPage';
+import EmployeeDashboard from './components/EmployeeDashboard';
 
-// Halaman placeholder untuk rute lain
+// Komponen untuk halaman yang belum dibuat
 const PlaceholderPage = ({ title }) => (
-    <div className="text-3xl font-bold">{title}</div>
+    <div className="p-8">
+        <h1 className="text-3xl font-bold text-gray-800">{title}</h1>
+        <p className="mt-2 text-gray-600">This page is under construction.</p>
+    </div>
 );
+
+// Komponen untuk melindungi rute
+const ProtectedRoute = ({ children }) => {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+        // Jika tidak ada token, arahkan ke halaman login
+        return <Navigate to="/login" replace />;
+    }
+    return children;
+};
+
 
 function App() {
   return (
@@ -20,19 +34,34 @@ function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
 
-        {/* Rute Admin (dibungkus dengan Layout) */}
-        <Route path="/admin" element={<AdminLayout />}>
+        {/* Rute Admin yang Dilindungi */}
+        <Route 
+            path="/admin" 
+            element={
+                <ProtectedRoute>
+                    <AdminLayout />
+                </ProtectedRoute>
+            }
+        >
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="documents" element={<DocumentsPage />} />
-          <Route path="attendance" element={<PlaceholderPage title="Attendance Page" />} />
-          <Route path="cuti" element={<PlaceholderPage title="Cuti Page" />} />
-          <Route path="profile" element={<PlaceholderPage title="Profile Page" />} />
+          <Route path="attendance" element={<PlaceholderPage title="Attendance" />} />
+          <Route path="cuti" element={<PlaceholderPage title="Cuti" />} />
+          <Route path="profile" element={<PlaceholderPage title="Profile" />} />
         </Route>
         
-        {/* Rute Employee */}
-        <Route path="/employee/dashboard" element={<EmployeeDashboard />} />
+        {/* Rute Employee yang Dilindungi */}
+        <Route 
+            path="/employee/dashboard" 
+            element={
+                <ProtectedRoute>
+                    <EmployeeDashboard />
+                </ProtectedRoute>
+            } 
+        />
         
-        {/* Tambahkan rute lain jika perlu */}
+        {/* Jika ada rute yang tidak cocok, arahkan ke halaman utama */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   );
