@@ -1,3 +1,5 @@
+// src/App.jsx
+
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import LandingPage from './components/LandingPage';
@@ -6,6 +8,7 @@ import AdminLayout from './components/AdminLayout';
 import DashboardPage from './components/DashboardPage';
 import DocumentsPage from './components/DocumentsPage';
 import EmployeeDashboard from './components/EmployeeDashboard';
+import CutiPage from './components/CutiPage'; // <-- 1. IMPORT HALAMAN BARU
 
 // Komponen untuk halaman yang belum dibuat
 const PlaceholderPage = ({ title }) => (
@@ -19,7 +22,6 @@ const PlaceholderPage = ({ title }) => (
 const ProtectedRoute = ({ children }) => {
     const token = localStorage.getItem('authToken');
     if (!token) {
-        // Jika tidak ada token, arahkan ke halaman login
         return <Navigate to="/login" replace />;
     }
     return children;
@@ -46,16 +48,17 @@ function App() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="documents" element={<DocumentsPage />} />
           <Route path="attendance" element={<PlaceholderPage title="Attendance" />} />
-          <Route path="cuti" element={<PlaceholderPage title="Cuti" />} />
+          <Route path="cuti" element={<CutiPage />} /> {/* <-- 2. GANTI DENGAN KOMPONEN BARU */}
           <Route path="profile" element={<PlaceholderPage title="Profile" />} />
         </Route>
         
         {/* Rute Employee yang Dilindungi */}
+        {/* CATATAN: Untuk karyawan bisa mengakses halaman cuti, Anda perlu membuat layout dan sidebar untuk karyawan juga */}
         <Route 
             path="/employee/dashboard" 
             element={
                 <ProtectedRoute>
-                    <EmployeeDashboard />
+                    <EmployeeDashboard /> 
                 </ProtectedRoute>
             } 
         />
