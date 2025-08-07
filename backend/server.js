@@ -11,11 +11,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Pemeriksaan Environment Variables
 if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY || !process.env.JWT_SECRET) {
-    console.error("FATAL ERROR: Environment variables are not set in backend/.env");
+    console.error("❌ FATAL ERROR: Pastikan Anda sudah membuat file .env di dalam folder /backend dan mengisi semua variabel yang dibutuhkan.");
     process.exit(1);
 }
 
+// Inisialisasi Supabase Client
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
 // --- Middleware ---
@@ -102,22 +104,69 @@ app.delete('/api/documents/:docId', authenticateToken, isAdmin, async (req, res)
     } catch (err) { res.status(500).json({ message: "Gagal menghapus dokumen." }); }
 });
 
-// --- ENDPOINT YANG DIPERBAIKI TOTAL ---
+// Endpoint untuk membuat signed URL (untuk upload)
 app.post('/api/documents/create-upload-url', authenticateToken, isAdmin, async (req, res) => {
     const { fileName } = req.body;
-    if (!fileName) return res.status(400).json({ message: "File name is required." });
+    if (!fileName) return res.status(400).json({ message: "Nama file dibutuhkan." });
     try {
-        // Menggunakan metode yang BENAR: createSignedUploadUrl
-        const { data, error } = await supabase.storage.from('company-documents').createSignedUploadUrl(fileName);
+        const { data, error } = await supabase.storage.from('company-documents').createSignedUrl(fileName, 60, { upsert: true }); // Menggunakan createSignedUrl yang lebih umum
         if (error) throw error;
         res.status(200).json(data);
     } catch (err) {
-        console.error("Error in /create-upload-url:", err.message);
-        res.status(500).json({ message: "Could not create upload URL.", error: err.message });
+        console.error("Error di /create-upload-url:", err.message);
+        res.status(500).json({ message: "Tidak dapat membuat URL upload.", error: err.message });
     }
 });
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-    console.log(`Backend server is running on http://localhost:${PORT}`);
+// ===============================================
+// API BARU UNTUK FITUR DASHBOARD & CUTI (DENGAN DATA CONTOH)
+// ===============================================
+app.get('/api/dashboard/stats', authenticateToken, (req, res) => res.json({ totalEmployee: 90, pendingAttendance: 5, leaveRequests: 3, onTimeToday: 78 }));
+app.get('/api/leave-requests', authenticateToken, (req, res) => res.json([{ id: 1, name: 'Budi Santoso', department: 'IT', leave_type: 'Cuti Sakit', start_date: '2025-08-07', end_date: '2025-08-08', days: 2, status: 'Pending', document_count: 1 }, { id: 2, name: 'Siti Aminah', department: 'Finance', leave_type: 'Cuti Tahunan', start_date: '2025-08-11', end_date: '2025-08-12', days: 2, status: 'Approved', document_count: 0 }, { id: 3, name: 'Joko Widodo', department: 'Marketing', leave_type: 'Cuti Melahirkan', start_date: '2025-09-01', end_date: '2025-11-30', days: 90, status: 'Pending', document_count: 2 }]));
+app.put('/api/leave-requests/:id', authenticateToken, isAdmin, (req, res) => { const { id } = req.params; const { status } = req.body; console.log(`Mengubah status cuti ID ${id} menjadi ${status}`); res.status(200).json({ message: `Status cuti berhasil diubah menjadi ${status}` }); });
+app.get('/api/leave-requests/:requestId/documents', authenticateToken, (req, res) => { const { requestId } = req.params; console.log(`Mengambil dokumen untuk pengajuan cuti ID: ${requestId}`); res.json([{ id: 1, file_name: 'surat_dokter.pdf', file_url: '#' }, { id: 2, file_name: 'hasil_lab.jpg', file_url: '#' }]); });
+app.get('/api/employee-quotas', authenticateToken, (req, res) => res.json([{ name: 'Budi Santoso', department: 'IT', total_quota: 12, used_quota: 5 }, { name: 'Siti Aminah', department: 'Finance', total_quota: 12, used_quota: 12 }, { name: 'Joko Widodo', department: 'Marketing', total_quota: 12, used_quota: 2 }]));
+app.get('/api/analytics', authenticateToken, (req, res) => res.json({ leaveTypes: [{ leave_type: 'Cuti Tahunan', count: 45 }, { leave_type: 'Cuti Sakit', count: 20 }, { leave_type: 'Cuti Melahirkan', count: 5 }, { leave_type: 'Lainnya', count: 10 }], monthlyTrends: [{ month: 'Jan', count: 5 }, { month: 'Feb', count: 8 }, { month: 'Mar', count: 12 }, { month: 'Apr', count: 7 }, { month: 'May', count: 15 }, { month: 'Jun', count: 10 }] }));
+
+// Endpoint Statistik Cuti (KHUSUS HALAMAN CUTI)
+app.get('/api/cuti/stats', authenticateToken, (req, res) => {
+    // Di aplikasi nyata, Anda akan menghitung ini dari database
+    res.json({
+        totalRequests: 80, // contoh
+        pending: 3,        // contoh
+        approved: 75,      // contoh
+        avgProcessing: 2   // contoh
+    });
 });
+
+// --- FUNGSI UNTUK MENJALANKAN SERVER ---
+const startServer = async () => {
+    try {
+        // Tes koneksi ke Supabase dengan query sederhana
+        console.log("Mencoba koneksi ke Supabase...");
+        const { error } = await supabase.from('users').select('id').limit(1);
+
+        if (error && error.message !== 'relation "public.users" does not exist') {
+            // Abaikan error jika tabel 'users' belum ada, tapi tampilkan error koneksi lainnya
+            throw new Error(error.message);
+        }
+        
+        console.log("✅ Koneksi ke Supabase berhasil.");
+
+        const PORT = process.env.PORT || 3000;
+        app.listen(PORT, () => {
+            console.log(`✅ Backend server berjalan di http://localhost:${PORT}`);
+        });
+
+    } catch (err) {
+        console.error("---------------------------------------------------------");
+        console.error("❌ GAGAL TERHUBUNG KE SUPABASE!");
+        console.error("Pesan Error:", err.message);
+        console.error("\nPastikan variabel SUPABASE_URL dan SUPABASE_SERVICE_KEY di file .env sudah benar.");
+        console.error("---------------------------------------------------------");
+        process.exit(1);
+    }
+};
+
+// Jalankan server
+startServer();
